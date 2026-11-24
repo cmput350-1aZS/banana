@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <memory>
 #include <vector>
 
 #include "CameraComponent.h"
@@ -9,6 +10,7 @@
 #include "InputComponent.h"
 #include "LocationComponent.h"
 #include "MathUtil.h"
+#include "Scene.h"
 #include "ScoreComponent.h"
 #include "SoundManager.h"
 #include "SpawnComponent.h"
@@ -23,10 +25,12 @@
 namespace ECSEngine {
 
 /**
- * @brief What a system is allowed to see of the engine: the managers and the frame time.
+ * @brief What a system is allowed to see of the engine: the shared managers, the frame time and
+ * the scene stack.
  *
- * Systems receive an EngineView*, not the ECSEngine itself, so they can read and change the
- * game's data but cannot start or stop the engine loop.
+ * Systems receive an EngineView*, not the ECSEngine itself, so they can use the shared resources
+ * and start or leave scenes, but cannot run the engine loop. A scene's own entities come from
+ * the SceneView a system is given, not from here.
  *
  * @tparam Components The component types the game uses.
  */
@@ -35,7 +39,6 @@ class EngineView {
 public:
     virtual SoundManager& GetSoundManager() = 0;
     virtual SpriteManager& GetSpriteManager() = 0;
-    virtual EntityManager<Components...>& GetEntityManager() = 0;
     virtual WindowManager& GetWindowManager() = 0;
 
     /**
@@ -46,13 +49,58 @@ public:
      * @return Seconds the previous frame took. It is 0 until the first frame has been timed.
      */
     virtual float GetFrameTime() = 0;
+
+    virtual const std::bitset<sf::Keyboard::ScancodeCount>& GetKeys() = 0;
+
+    /**
+     * @brief Tells whether debug drawing is switched on (the D key toggles it).
+     *
+     *
+     * @return True while collision boxes should be drawn.
+     */
+    virtual bool GetDebug() = 0;
+
+    /**
+     * @brief Gives the top scene, the one the engine runs this frame.
+     *
+     * @return The last scene on the stack. The stack must not be empty.
+     */
+    virtual std::shared_ptr<SceneView<Components...>> GetScene() = 0;
+
+    /**
+     * @brief Creates a new, empty scene that shares the engine's window.
+     *
+     * Only the engine can build a scene (the ECSScene constructor is private), so systems ask
+     * for one here. The scene is not on the stack until it is passed to AddScene.
+     *
+     * 
+    */
+    virtual std::shared_ptr<SceneView<Components...>> MakeScene() = 0;
+
+    /**
+     * @brief Asks for a scene to be pushed on the stack.
+     *
+     * The scene waits in a list and goes on the stack at the end of the current frame (or at the
+     * start of Run() if it was added before that), after any finished scene has been popped.
+     *
+     * @param scene The scene to add, usually one made by MakeScene.
+     */
+    virtual void AddScene(std::shared_ptr<SceneView<Components...>> scene) = 0;
+
+    /**
+     * @brief Removes the top scene from the stack right away.
+     *
+     * Run() already pops a scene that returns kSceneDone, so a system should not also call this
+     * for the same scene.
+     */
+    virtual void PopScene() = 0;
 };
 
 /**
- * @brief Owns the managers and runs the game loop.
+ * @brief Owns the shared managers and the stack of scenes, and runs the game loop.
  *
- * Each frame it handles window and keyboard events, measures the frame time, then runs every
- * system in the order set in SystemManager.
+ * Each frame it handles window and keyboard events, measures the frame time, then asks the top
+ * scene to run one frame. A scene that reports it is finished is popped off the stack.
  *
  * @tparam Components The component types the game uses.
  */
@@ -70,7 +118,10 @@ public:
     ~ECSEngine();
 
     /**
-     * @brief Runs the game loop until the window is closed or a system returns kExit.
+     * @brief Runs the game loop until the window is closed.
+     *
+     * Scenes added with AddScene before this call are put on the stack first, so the first frame
+     * always has a top scene to run.
      */
     void Run();
 
@@ -78,14 +129,28 @@ public:
 
     SpriteManager& GetSpriteManager() override { return mSpriteManager; }
 
-    EntityManager<Components...>& GetEntityManager() override { return mEntityManager; }
-
     WindowManager& GetWindowManager() override { return mWindowManager; }
 
-    SystemManager<Components...>& GetSystemManager() { return mSystemManager; }
-
-    /** @copydoc EngineView::GetFrameTime */
     float GetFrameTime() override { return mFrameTime; }
+
+    const std::bitset<sf::Keyboard::ScancodeCount>& GetKeys() override { return mKeys; }
+
+
+    bool GetDebug() override { return debug; }
+
+    std::shared_ptr<SceneView<Components...>> GetScene() override { return mScenes.back(); }
+
+    std::shared_ptr<SceneView<Components...>> MakeScene() override {
+        // new, not std::make_shared: make_shared cannot reach the private ECSScene constructor
+        auto ptr = new ECSScene<Components...>(mWindowManager);
+        return std::shared_ptr<ECSScene<Components...>>(ptr);
+    }
+
+    void AddScene(std::shared_ptr<SceneView<Components...>> scene) override {
+        mNewScenes.push_back(scene);
+    }
+
+    void PopScene() override { mScenes.pop_back(); }
 
 private:
     /**
@@ -96,10 +161,12 @@ private:
      * @return False if the window was closed, so the loop should stop; true otherwise.
      */
     bool ProcessEvents();
-    void DebugDraw();
 
-    EntityManager<Components...> mEntityManager;
-    SystemManager<Components...> mSystemManager;
+    // The scene stack. The last element is the top scene, the one that runs.
+    std::vector<std::shared_ptr<SceneView<Components...>>> mScenes;
+    // The waiting room: scenes added during a frame. Run() moves them onto mScenes after the pop.
+    std::vector<std::shared_ptr<SceneView<Components...>>> mNewScenes;
+
     SpriteManager mSpriteManager;
     SoundManager mSoundManager;
     WindowManager mWindowManager;
@@ -110,6 +177,8 @@ private:
     // For debugging - pause and step the engine
     bool running, step;
     int debug = 0;
+
+    std::bitset<sf::Keyboard::ScancodeCount> mKeys;
 };
 
 template <typename... Components>
@@ -127,19 +196,29 @@ void ECSEngine<Components...>::Run() {
 
     // Restart once before the loop so the time spent loading is not counted in frame 1
     mClock.restart();
-    while (ProcessEvents()) {
+
+    // Seat the scenes added before Run() so GetScene() never sees an empty stack in frame 1
+    mScenes.insert(mScenes.end(), mNewScenes.begin(), mNewScenes.end());
+    mNewScenes.clear();
+
+    while (ProcessEvents() && !mScenes.empty()) {
         // restart() returns the time since the last restart, which is the previous frame's
         // duration, and starts timing the next frame
         mFrameTime = std::min(mClock.restart().asSeconds(), 1.0f / 30.0f);
-        // Run every system in order; one returning kExit stops the game
-        auto keepRunning = mSystemManager.Run(this);
-        if (!keepRunning) {
-            break;
+
+        // Run the top scene for one frame. Our own copy of the pointer keeps it alive below.
+        auto scene = GetScene();
+        auto result = scene->DoOneFrame(this);
+        // The scene says it is finished, so take it off the stack
+        if (result == kSceneDone) {
+            PopScene();
         }
 
-        if (debug) {
-            DebugDraw();
-        }
+        // Add the scenes requested this frame only after the pop, so the pop removes the
+        // finished scene and never a new one
+        mScenes.insert(mScenes.end(), mNewScenes.begin(), mNewScenes.end());
+        mNewScenes.clear();
+
         mWindowManager.GetWindow()->display();
     }
 }
@@ -161,56 +240,16 @@ bool ECSEngine<Components...>::ProcessEvents() {
             if (pressed->scancode == sf::Keyboard::Scan::D) {
                 debug = !debug;
             }
-            // Every entity that listens to the keyboard gets the key marked as down
-            for (Entity e : mEntityManager) {
-                if (mEntityManager.IsValid(e.GetID())) {
-                    if (mEntityManager.template HasComponent<InputComponent>(e.GetID())) {
-                        auto& name =
-                            mEntityManager.template GetComponent<InputComponent>(e.GetID());
-                        name.keydown.set(static_cast<size_t>(pressed->scancode), true);
-                    }
-                }
-            }
+
+            mKeys.set(static_cast<size_t>(pressed->scancode), true);
         }
 
         auto released = event->template getIf<sf::Event::KeyReleased>();
-        // Same loop for a key release, clearing the key's bit instead of setting it
         if (released) {
-            for (Entity e : mEntityManager) {
-                if (mEntityManager.IsValid(e.GetID())) {
-                    if (mEntityManager.template HasComponent<InputComponent>(e.GetID())) {
-                        auto& name =
-                            mEntityManager.template GetComponent<InputComponent>(e.GetID());
-                        name.keydown.set(static_cast<size_t>(released->scancode), false);
-                    }
-                }
-            }
+            mKeys.set(static_cast<size_t>(released->scancode), false);
         }
     }
     return true;
-}
-
-template <typename... Components>
-void ECSEngine<Components...>::DebugDraw() {
-    for (Entity e : mEntityManager) {
-        if (!mEntityManager.IsValid(e.GetID()) ||
-            !mEntityManager.template HasComponent<CollisionComponent>(e.GetID()) ||
-            !mEntityManager.template HasComponent<LocationComponent>(e.GetID())) {
-            continue;
-        }
-
-        auto& collision = mEntityManager.template GetComponent<CollisionComponent>(e.GetID());
-        auto& location = mEntityManager.template GetComponent<LocationComponent>(e.GetID());
-        Rect box{Point2D(collision.collisionBox.topLeft.x + location.loc.x,
-                         collision.collisionBox.topLeft.y + location.loc.y),
-                 collision.collisionBox.width, collision.collisionBox.height};
-
-        if (collision.staticEntity) {
-            mWindowManager.DebugFrameRect(box, 255, 0, 0);
-        } else {
-            mWindowManager.DebugFrameRect(box, 0, 255, 0);
-        }
-    }
 }
 
 }  // namespace ECSEngine

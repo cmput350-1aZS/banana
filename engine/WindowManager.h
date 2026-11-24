@@ -13,6 +13,15 @@ namespace ECSEngine {
 class WindowManager {
 public:
     WindowManager(unsigned int width, unsigned int height, const std::string& title);
+    /**
+     * @brief Borrows an existing window instead of creating one.
+     *
+     * Each scene builds its own WindowManager from the engine's window, so every scene draws into
+     * the same window but keeps its own camera (world center and scale).
+     *
+     * @param window The window to share. It must not be null.
+     */
+    WindowManager(std::shared_ptr<sf::RenderWindow> window);
     ~WindowManager() = default;
     std::shared_ptr<sf::RenderWindow> GetWindow() const;
     Rect GetWindowBounds() const;

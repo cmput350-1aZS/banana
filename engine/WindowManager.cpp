@@ -12,6 +12,11 @@ WindowManager::WindowManager(unsigned int width, unsigned int height, const std:
       mWorldCenter(width / 2.0f, height / 2.0f),
       mWorldScale(1.0f) {}
 
+WindowManager::WindowManager(std::shared_ptr<sf::RenderWindow> window) 
+    : mWindow(window),
+      mWorldCenter(window->getSize().x / 2.0f, window->getSize().y / 2.0f),
+      mWorldScale(1.0f) {}
+
 std::shared_ptr<sf::RenderWindow> WindowManager::GetWindow() const { return mWindow; }
 
 Rect WindowManager::GetWindowBounds() const {

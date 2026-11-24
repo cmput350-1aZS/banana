@@ -11,19 +11,22 @@ template <typename... Components>
 class EngineView;
 
 template <typename... Components>
+class SceneView;
+
+template <typename... Components>
 class System {
 public:
     virtual ~System() = default;
-    virtual tSystemReturn Run(EngineView<Components...>* scene) = 0;
+    virtual tSystemReturn Run(EngineView<Components...>* engine, SceneView<Components...>* scene) = 0;
     virtual const std::string& GetName() const = 0;
 };
 
 template <typename... Components>
 class SystemManager {
 public:
-    bool Run(EngineView<Components...>* scene) {
+    bool Run(EngineView<Components...>* engine, SceneView<Components...>* scene) {
         for (auto& system : mSystems) {
-            if (system->Run(scene) == kExit)  // system wants to exit
+            if (system->Run(engine, scene) == kExit)  // system wants to exit
             {
                 std::cout << system->GetName() << " requested exit from system manager\n";
                 return false;

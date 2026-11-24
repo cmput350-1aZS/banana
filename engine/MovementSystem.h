@@ -1,4 +1,7 @@
 #pragma once
+
+#include "Scene.h"
+
 namespace ECSEngine {
 
 template <typename... Components>
@@ -16,11 +19,12 @@ public:
      * a MovementComponent and a LocationComponent, adds velocity (pixels per second) times the
      * duration of the last frame in seconds (engine->GetFrameTime()) to loc.
      *
-     * @param engine Gives access to the entity manager and the frame time.
+     * @param engine The shared engine; used here for the frame time.
+     * @param scene The scene being run; its entity manager holds the entities to move.
      * @return kContinue, so the engine keeps running.
      */
-    tSystemReturn Run(EngineView<Components...>* engine) override {
-        auto& em = engine->GetEntityManager();
+    tSystemReturn Run(EngineView<Components...>* engine, SceneView<Components...>* scene) override {
+        auto& em = scene->GetEntityManager();
 
         // Skip the gaps left by removed entities, and entities missing either component
         for (auto& e : em) {
