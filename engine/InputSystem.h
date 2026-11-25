@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Keyboard.h"
+#include "Scene.h"
 
 namespace ECSEngine {
 
@@ -53,8 +54,8 @@ public:
      * @param engine Gives access to the entity manager.
      * @return kContinue, so the engine keeps running.
      */
-    tSystemReturn Run(EngineView<Components...>* engine) override {
-        auto& em = engine->GetEntityManager();
+    tSystemReturn Run(EngineView<Components...>* engine, SceneView<Components...>* scene) override {
+        auto& em = scene->GetEntityManager();
 
         for (auto& e : em) {
             auto id = e.GetID();

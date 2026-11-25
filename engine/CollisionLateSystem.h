@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Scene.h"
+
 namespace ECSEngine {
 
 template <typename... Components>
@@ -21,8 +23,9 @@ public:
      * @param engine Gives access to the entity manager.
      * @return kContinue, so the engine keeps running.
      */
-    tSystemReturn Run(EngineView<Components...>* engine) override {
-        auto& em = engine->GetEntityManager();
+    tSystemReturn Run(EngineView<Components...>* /*engine*/,
+                      SceneView<Components...>* scene) override {
+        auto& em = scene->GetEntityManager();
 
         // Skip the gaps left by removed entities, and entities missing either component
         for (auto& e : em) {

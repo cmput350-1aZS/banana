@@ -11,6 +11,7 @@
 #include "EntityManager.h"
 #include "LocationComponent.h"
 #include "MovementComponent.h"
+#include "Scene.h"
 #include "SpawnComponent.h"
 #include "SpriteComponent.h"
 #include "SystemManager.h"
@@ -25,8 +26,9 @@ public:
         return name;
     }
 
-    tSystemReturn Run(EngineView<Components...>* engine) override {
-        auto& entities = engine->GetEntityManager();
+    tSystemReturn Run(EngineView<Components...>* /*engine*/,
+                      SceneView<Components...>* scene) override {
+        auto& entities = scene->GetEntityManager();
 
         static std::mt19937 generator(std::random_device{}());
 

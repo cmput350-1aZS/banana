@@ -7,6 +7,7 @@
 #include "CameraComponent.h"
 #include "EntityManager.h"
 #include "MathUtil.h"
+#include "Scene.h"
 #include "SpriteManager.h"
 #include "SystemManager.h"
 #include <SFML/Graphics/Sprite.hpp>
@@ -29,10 +30,10 @@ public:
         return name;
     }
 
-    tSystemReturn Run(EngineView<Components...>* engine) override {
-        auto& entities = engine->GetEntityManager();
+    tSystemReturn Run(EngineView<Components...>* engine, SceneView<Components...>* scene) override {
+        auto& entities = scene->GetEntityManager();
         auto& spriteManager = engine->GetSpriteManager();
-        auto& windowManager = engine->GetWindowManager();
+        auto& windowManager = scene->GetWindowManager();
 
         auto window = windowManager.GetWindow();
 

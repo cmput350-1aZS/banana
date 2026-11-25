@@ -14,6 +14,7 @@
 #include "GravitySystem.h"
 #include "InputComponent.h"
 #include "InputSystem.h"
+#include "KeyboardSystem.h"
 #include "LocationComponent.h"
 #include "MathUtil.h"
 #include "MovementComponent.h"
@@ -35,7 +36,8 @@ std::string gResourcePath = "../assets/";
         ECSEngine::CameraShake, ECSEngine::ScoreComponent, ECSEngine::RespawnComponent
 using Engine = ECSEngine::ECSEngine<COMPONENTS>;
 
-void LoadMap(Engine& engine, const std::string& path, const std::string& file) {
+void LoadMap(Engine& engine, ECSEngine::SceneView<COMPONENTS>& scene, const std::string& path,
+             const std::string& file) {
     std::string fullPath = path + file;
     std::string word;
     int number;
@@ -96,7 +98,7 @@ void LoadMap(Engine& engine, const std::string& path, const std::string& file) {
                 continue;
             }
 
-            auto& em = engine.GetEntityManager();
+            auto& em = scene.GetEntityManager();
             ECSEngine::EntityID tile = em.CreateEntity("tile");
             float x = ox + (col * tw);
             float y = oy + (row * th);
@@ -145,9 +147,12 @@ int main(int argc, char* argv[]) {
     soundManager.RegisterSound(gResourcePath + "sfx_gem.ogg", "star");
     soundManager.RegisterSound(gResourcePath + "footstep_snow_001.ogg", "wall");
 
+    // The scene owns this level's entities, systems and camera
+    auto scene = engine.MakeScene();
+
     // Load maps
-    LoadMap(engine, gResourcePath, "sky.map");
-    LoadMap(engine, gResourcePath, "world.map");
+    LoadMap(engine, *scene, gResourcePath, "sky.map");
+    LoadMap(engine, *scene, gResourcePath, "world.map");
 
     // Place player
     // The player is one entity made of components. Location is the top-left corner in world
@@ -155,7 +160,7 @@ int main(int argc, char* argv[]) {
     // drops it onto the floor. It starts at rest (velocity 0). Gravity is an acceleration in
     // pixels per second squared; it stays on the entity for the whole game, it is not a one-off
     // push. The value is a guess to be tuned.
-    auto& em = engine.GetEntityManager();
+    auto& em = scene->GetEntityManager();
     ECSEngine::EntityID player = em.CreateEntity("player");
     em.AddComponent(player, ECSEngine::LocationComponent{{704, 500}});
     em.AddComponent(player, ECSEngine::MovementComponent{{0, 0}});
@@ -248,8 +253,9 @@ int main(int argc, char* argv[]) {
     em.AddComponent(starEntity, starCollision);
 
     // Add all systems
-    auto& sm = engine.GetSystemManager();
+    auto& sm = scene->GetSystemManager();
     sm.AddSystem(std::make_unique<ECSEngine::CollisionLateSystem<COMPONENTS>>());
+    sm.AddSystem(std::make_unique<ECSEngine::KeyboardSystem<COMPONENTS>>());
     sm.AddSystem(std::make_unique<ECSEngine::InputSystem<COMPONENTS>>());
     sm.AddSystem(std::make_unique<ECSEngine::GravitySystem<COMPONENTS>>());
     sm.AddSystem(std::make_unique<ECSEngine::MovementSystem<COMPONENTS>>());
@@ -259,6 +265,7 @@ int main(int argc, char* argv[]) {
     sm.AddSystem(std::make_unique<ECSEngine::SpriteSystem<COMPONENTS>>());
     sm.AddSystem(std::make_unique<ECSEngine::SpawnSystem<COMPONENTS>>());
 
+    engine.AddScene(scene);
     engine.Run();
     return 0;
 }

@@ -5,10 +5,11 @@
 #include <string>
 
 #include "Entity.h"
+#include "EntityManager.h"
+#include "Scene.h"
 #include "ScoreComponent.h"
 #include "SpriteComponent.h"
 #include "SystemManager.h"
-#include "EntityManager.h"
 
 namespace ECSEngine {
 
@@ -20,38 +21,30 @@ public:
         return name;
     }
 
-    tSystemReturn Run(EngineView<Components...>* engine) override {
-        auto& entities = engine->GetEntityManager();
+    tSystemReturn Run(EngineView<Components...>* /*engine*/,
+                      SceneView<Components...>* scene) override {
+        auto& entities = scene->GetEntityManager();
 
         const EntityID entityCount =
-            static_cast<EntityID>(
-                std::distance(entities.cbegin(), entities.cend())
-            );
+            static_cast<EntityID>(std::distance(entities.cbegin(), entities.cend()));
 
         for (const Entity& entity : entities) {
             EntityID id = entity.GetID();
 
-            if (!entities.IsValid(id) ||
-                !entities.template HasComponent<ScoreComponent>(id)) {
+            if (!entities.IsValid(id) || !entities.template HasComponent<ScoreComponent>(id)) {
                 continue;
             }
 
-            auto& scoreComponent =
-                entities.template GetComponent<ScoreComponent>(id);
+            auto& scoreComponent = entities.template GetComponent<ScoreComponent>(id);
 
             const int score = std::clamp(scoreComponent.score, 0, 999);
 
-            const int digits[3] = {
-                score / 100,
-                (score / 10) % 10,
-                score % 10
-            };
+            const int digits[3] = {score / 100, (score / 10) % 10, score % 10};
 
             for (int i = 0; i < 3; ++i) {
                 const EntityID digitEntity = scoreComponent.digitID[i];
 
-                if (digitEntity >= entityCount ||
-                    !entities.IsValid(digitEntity) ||
+                if (digitEntity >= entityCount || !entities.IsValid(digitEntity) ||
                     !entities.template HasComponent<SpriteComponent>(digitEntity)) {
                     continue;
                 }
@@ -59,8 +52,7 @@ public:
                 auto& spriteComponent =
                     entities.template GetComponent<SpriteComponent>(digitEntity);
 
-                spriteComponent.textureID =
-                    scoreComponent.digitTextureID[digits[i]];
+                spriteComponent.textureID = scoreComponent.digitTextureID[digits[i]];
             }
         }
 

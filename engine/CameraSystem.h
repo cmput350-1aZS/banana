@@ -12,6 +12,7 @@
 #include "EntityManager.h"
 #include "LocationComponent.h"
 #include "MathUtil.h"
+#include "Scene.h"
 #include "SpriteComponent.h"
 #include "SystemManager.h"
 #include "WindowManager.h"
@@ -28,9 +29,10 @@ public:
         return name;
     }
 
-    tSystemReturn Run(EngineView<Components...>* engine) override {
-        auto& entities = engine->GetEntityManager();
-        auto& windowManager = engine->GetWindowManager();
+    tSystemReturn Run(EngineView<Components...>* /*engine*/,
+                      SceneView<Components...>* scene) override {
+        auto& entities = scene->GetEntityManager();
+        auto& windowManager = scene->GetWindowManager();
 
         CameraComponent* camera = nullptr;
         CameraShake* shake = nullptr;
