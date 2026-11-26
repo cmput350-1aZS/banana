@@ -1,24 +1,23 @@
 #pragma once
 
 #include <bitset>
-#include <unordered_map>
 #include <string>
+#include <unordered_map>
 
 #include "CameraComponent.h"
+#include "Entity.h"
 #include "EntityManager.h"
+#include "LocationComponent.h"
 #include "MathUtil.h"
 #include "Scene.h"
+#include "SpriteComponent.h"
 #include "SpriteManager.h"
 #include "SystemManager.h"
-#include <SFML/Graphics/Sprite.hpp>
-#include <SFML/Graphics/Texture.hpp>
-
-#include "Entity.h"
-#include "LocationComponent.h"
-#include "SpriteComponent.h"
 #include "WindowManager.h"
 #include <SFML/Graphics/RenderWindow.hpp>
-
+#include <SFML/Graphics/Sprite.hpp>
+#include <SFML/Graphics/Texture.hpp>
+#include <SFML/Graphics/VertexArray.hpp>
 
 namespace ECSEngine {
 
@@ -43,35 +42,31 @@ public:
 
         window->clear();
 
+        sf::VertexArray vertices(sf::PrimitiveType::Triangles);  // an empty list of corners
+
         for (const Entity& entity : entities) {
             EntityID id = entity.GetID();
 
-            if (!entities.IsValid(id) ||
-                !entities.template HasComponent<SpriteComponent>(id)) {
+            if (!entities.IsValid(id) || !entities.template HasComponent<SpriteComponent>(id)) {
                 continue;
             }
 
-            const auto& spriteComponent =
-                entities.template GetComponent<SpriteComponent>(id);
+            const auto& spriteComponent = entities.template GetComponent<SpriteComponent>(id);
 
             Point2D basePosition(0.0f, 0.0f);
 
             if (entities.template HasComponent<LocationComponent>(id)) {
-                basePosition =
-                    entities.template GetComponent<LocationComponent>(id).loc;
+                basePosition = entities.template GetComponent<LocationComponent>(id).loc;
             }
 
-            Point2D drawPosition(
-                basePosition.x + spriteComponent.bounds.topLeft.x,
-                basePosition.y + spriteComponent.bounds.topLeft.y
-            );
+            Point2D drawPosition(basePosition.x + spriteComponent.bounds.topLeft.x,
+                                 basePosition.y + spriteComponent.bounds.topLeft.y);
 
             if (spriteComponent.worldSpace) {
                 drawPosition = windowManager.WorldToWindow(drawPosition);
             }
 
-            sf::Sprite sprite =
-                spriteManager.GetSprite(spriteComponent.textureID);
+            sf::Sprite sprite = spriteManager.GetSprite(spriteComponent.textureID);
 
             sf::IntRect sourceRect = sprite.getTextureRect();
 
@@ -79,13 +74,9 @@ public:
                 continue;
             }
 
-            float scaleX =
-                spriteComponent.bounds.width /
-                static_cast<float>(sourceRect.size.x);
+            float scaleX = spriteComponent.bounds.width / static_cast<float>(sourceRect.size.x);
 
-            float scaleY =
-                spriteComponent.bounds.height /
-                static_cast<float>(sourceRect.size.y);
+            float scaleY = spriteComponent.bounds.height / static_cast<float>(sourceRect.size.y);
 
             if (spriteComponent.worldSpace) {
                 const float worldScale = windowManager.GetWorldScale();
@@ -98,11 +89,43 @@ public:
                 scaleY /= worldScale;
             }
 
-            sprite.setPosition({drawPosition.x, drawPosition.y});
-            sprite.setScale({scaleX, scaleY});
+            float screenRight = drawPosition.x + static_cast<float>(sourceRect.size.x) * scaleX;
+            float screenLeft = drawPosition.x;
+            float screenTop = drawPosition.y;
+            float screenBottom = drawPosition.y + static_cast<float>(sourceRect.size.y) * scaleY;
 
-            window->draw(sprite);
+            float sheetLeft = sourceRect.position.x;
+            float sheetRight = sourceRect.position.x + sourceRect.size.x;
+            float sheetTop = sourceRect.position.y;
+            float sheetBottom = sourceRect.position.y + sourceRect.size.y;
+
+            sf::Vertex topLeft;
+            topLeft.position = {screenLeft, screenTop};
+            topLeft.texCoords = {sheetLeft, sheetTop};
+            vertices.append(topLeft);
+
+            sf::Vertex topRight;
+            topRight.position = {screenRight, screenTop};
+            topRight.texCoords = {sheetRight, sheetTop};
+            vertices.append(topRight);
+
+            sf::Vertex bottomLeft;
+            bottomLeft.position = {screenLeft, screenBottom};
+            bottomLeft.texCoords = {sheetLeft, sheetBottom};
+            vertices.append(bottomLeft);
+
+            sf::Vertex bottomRight;
+            bottomRight.position = {screenRight, screenBottom};
+            bottomRight.texCoords = {sheetRight, sheetBottom};
+            vertices.append(bottomRight);
+
+            vertices.append(topRight);
+            vertices.append(bottomLeft);
+
+
         }
+
+        window->draw(vertices, &spriteManager.GetTexture());
 
         return kContinue;
     }
